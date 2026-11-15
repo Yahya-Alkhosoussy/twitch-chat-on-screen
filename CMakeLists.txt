@@ -1,0 +1,240 @@
+cmake_minimum_required(VERSION 3.16)
+
+project(twitch-chat-on-screen VERSION 0.1 LANGUAGES CXX)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_AUTORCC ON)
+
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+
+find_package(OpenSSL CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+
+set(PROJECT_SOURCES
+        src/main.cpp
+        src/mainwindow.cpp
+        src/updateChecker.cpp
+        include/mainwindow.h
+        include/updateChecker.h
+        ui/mainwindow.ui
+)
+
+if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+    qt_add_executable(twitch-chat-on-screen
+        MANUAL_FINALIZATION
+        ${PROJECT_SOURCES}
+    )
+# Define target properties for Android with Qt 6 as:
+#    set_property(TARGET twitch-chat-on-screen APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
+#                 ${CMAKE_CURRENT_SOURCE_DIR}/android)
+# For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
+else()
+    if(ANDROID)
+        add_library(twitch-chat-on-screen SHARED
+            ${PROJECT_SOURCES}
+        )
+# Define properties for Android with Qt 5 after find_package() calls as:
+#    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
+    else()
+        add_executable(twitch-chat-on-screen
+            ${PROJECT_SOURCES}
+        )
+    endif()
+endif()
+
+
+set(Python3_ROOT_DIR "${CMAKE_SOURCE_DIR}/.venv")
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+if(APPLE)
+    if(NOT EXISTS "/Library/Frameworks/Python.framework/Versions/3.12/Python")
+        # only needed for the specific local install-name bug; skip if not applicable
+    else()
+        set(Python3_LIBRARY "/Library/Frameworks/Python.framework/Versions/3.12/Python")
+    endif()
+endif()
+
+if(WIN32)
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" -c "import sys; print(sys.base_prefix)"
+        OUTPUT_VARIABLE PYTHON_BASE_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    file(TO_CMAKE_PATH "${PYTHON_BASE_PREFIX}" PYTHON_BASE_PREFIX)
+    file(GLOB PYTHON_RUNTIME_DLLS "${PYTHON_BASE_PREFIX}/python3*.dll")
+    install(FILES ${PYTHON_RUNTIME_DLLS} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    
+    install(DIRECTORY "${PYTHON_BASE_PREFIX}/Lib/"
+        DESTINATION python/Lib
+        PATTERN "site-packages" EXCLUDE
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN "test" EXCLUDE
+    )
+
+    install(DIRECTORY "${PYTHON_BASE_PREFIX}/DLLs/"
+        DESTINATION python/DLLs
+    )
+
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" -m pybind11 --cmakedir
+        OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REPLACE "\"" "" PYBIND11_CMAKE_DIR "${PYBIND11_CMAKE_DIR}") # sss
+    file(TO_CMAKE_PATH ${PYBIND11_CMAKE_DIR} PYBIND11_CMAKE_DIR)
+    message(STATUS "pybind11 cmake dir: ${PYBIND11_CMAKE_DIR}")
+
+    if(NOT EXISTS "${PYBIND11_CMAKE_DIR}/pybind11Config.cmake")
+        message(FATAL_ERROR "pybind11Config.cmake not found under '${PYBIND11_CMAKE_DIR}'")
+    endif()
+
+    list(PREPEND CMAKE_PREFIX_PATH "${PYBIND11_CMAKE_DIR}")
+
+endif()
+
+find_package(pybind11 CONFIG REQUIRED)
+
+target_link_libraries(twitch-chat-on-screen PRIVATE 
+    Qt${QT_VERSION_MAJOR}::Widgets 
+    pybind11::embed 
+    nlohmann_json::nlohmann_json
+    OpenSSL::SSL
+    OpenSSL::Crypto
+)
+
+# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
+# If you are developing for iOS or macOS you should consider setting an
+# explicit, fixed bundle identifier manually though.
+if(${QT_VERSION} VERSION_LESS 6.1.0)
+  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.twitch-chat-on-screen)
+endif()
+set_target_properties(twitch-chat-on-screen PROPERTIES
+    ${BUNDLE_ID_OPTION}
+    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE TRUE
+    WIN32_EXECUTABLE TRUE
+)
+
+include(GNUInstallDirs)
+install(TARGETS twitch-chat-on-screen
+    BUNDLE DESTINATION .
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+if(QT_VERSION_MAJOR EQUAL 6)
+    qt_finalize_executable(twitch-chat-on-screen)
+endif()
+
+if(APPLE)
+    target_link_libraries(twitch-chat-on-screen PRIVATE
+        "-framework CoreFoundation"
+        "-framework Security")
+endif()
+
+target_compile_definitions(twitch-chat-on-screen PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+target_compile_definitions(twitch-chat-on-screen PRIVATE
+    PROJECT_PYTHON_DIR="${CMAKE_CURRENT_SOURCE_DIR}/python")
+
+add_custom_command(TARGET twitch-chat-on-screen POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/cacert.pem"
+        "$<TARGET_FILE_DIR:twitch-chat-on-screen>/cacert.pem")
+
+if(APPLE)
+    install(CODE "
+        execute_process(COMMAND ditto
+            \"$<TARGET_BUNDLE_DIR:twitch-chat-on-screen>\"
+            \"\${CMAKE_INSTALL_PREFIX}/twitch-chat-on-screen.app\"
+        )
+    ")
+else()
+    install(TARGETS twitch-chat-on-screen
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+endif()
+
+if(APPLE)
+    install(DIRECTORY "${Python3_ROOT_DIR}/lib/python3.12/site-packages/"
+        DESTINATION twitch-chat-on-screen.app/Contents/Resources/python/site-packages
+    )
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/python/"
+        DESTINATION twitch-chat-on-screen.app/Contents/Resources/python/scripts
+        PATTERN "token.json" EXCLUDE
+        PATTERN "__pycache__" EXCLUDE
+        PATTERN ".DS_Store" EXCLUDE
+    )
+elseif(WIN32)
+    install(DIRECTORY "${Python3_ROOT_DIR}/Lib/site-packages/"
+        DESTINATION python/site-packages
+    )
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/python/"
+        DESTINATION python/scripts
+    )
+endif()
+
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/cacert.pem" DESTINATION bin)
+
+qt_generate_deploy_app_script(
+    TARGET twitch-chat-on-screen
+    OUTPUT_SCRIPT deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
+install(SCRIPT ${deploy_script})
+
+if(WIN32)
+    install(CODE "
+        file(GLOB FFMPEG_DLLS
+            \"\${CMAKE_INSTALL_PREFIX}/bin/avcodec-*.dll\"
+            \"\${CMAKE_INSTALL_PREFIX}/bin/avformat-*.dll\"
+            \"\${CMAKE_INSTALL_PREFIX}/bin/avutil-*.dll\"
+            \"\${CMAKE_INSTALL_PREFIX}/bin/swscale-*.dll\"
+            \"\${CMAKE_INSTALL_PREFIX}/bin/swresample-*.dll\"
+        )
+        file(COPY \${FFMPEG_DLLS} DESTINATION \"\${CMAKE_INSTALL_PREFIX}/plugins/multimedia\")
+    ")
+endif()
+
+# Step 6 — CPack, must come last
+if(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+elseif(WIN32)
+    set(CPACK_GENERATOR "NSIS")
+endif()
+
+if(WIN32)
+    if(NOT DEFINED VC_REDIST_INSTALLER)
+        file(GLOB VC_REDIST_CANDIDATES
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/vc_redist.x64.exe"
+            "C:/Program Files/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/vc_redist.x64.exe"
+        )
+        if(VC_REDIST_CANDIDATES)
+            list(GET VC_REDIST_CANDIDATES 0 VC_REDIST_INSTALLER)
+        endif()
+    endif()
+
+    if(DEFINED VC_REDIST_INSTALLER AND EXISTS "${VC_REDIST_INSTALLER}")
+        file(TO_CMAKE_PATH "${VC_REDIST_INSTALLER}" VC_REDIST_INSTALLER)
+        install(FILES "${VC_REDIST_INSTALLER}" DESTINATION redist)
+        set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [[
+ExecWait '"$INSTDIR/redist/vc_redist.x64.exe" /install /quiet /norestart'
+]])
+    else()
+        message(WARNING "VC_REDIST_INSTALLER not provided — Windows installer will not bundle the VC++ Redistributable")
+    endif()
+endif()
+
+set(CPACK_PACKAGE_NAME "twitch-chat-on-screen")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+configure_file(version.h.in ${PROJECT_BINARY_DIR}/version.h)
+target_include_directories(twitch-chat-on-screen PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+include(CPack)
