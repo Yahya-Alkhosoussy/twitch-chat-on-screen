@@ -1,0 +1,16 @@
+{
+  "name": "twitch-chat-display",
+  "version": "1.0.0",
+  "builtin-baseline": "44ccfd88b3eca6929d6d16398c7b19945c29a5f6",
+  "dependencies": [
+    "openssl",
+    "nlohmann-json",
+    { "name": "cpp-httplib", "features": ["openssl"] }
+  ],
+  "overrides": [
+    {
+      "name": "openssl",
+      "version": "3.6.0"
+    }
+  ]
+}
