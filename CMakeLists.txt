@@ -9,6 +9,8 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_SOURCE_DIR}/ui)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -22,9 +24,12 @@ set(PROJECT_SOURCES
         src/main.cpp
         src/mainwindow.cpp
         src/updateChecker.cpp
+        src/preferences.cpp
         include/mainwindow.h
         include/updateChecker.h
+        include/preferences.h
         ui/mainwindow.ui
+        ui/preferences.ui
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
