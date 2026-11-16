@@ -13,7 +13,31 @@
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
-  <widget class="QWidget" name="centralwidget"/>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="QScrollArea" name="scrollArea_messages">
+    <property name="geometry">
+     <rect>
+      <x>19</x>
+      <y>19</y>
+      <width>721</width>
+      <height>531</height>
+     </rect>
+    </property>
+    <property name="widgetResizable">
+     <bool>true</bool>
+    </property>
+    <widget class="QWidget" name="layout_messages">
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>719</width>
+       <height>529</height>
+      </rect>
+     </property>
+    </widget>
+   </widget>
+  </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
@@ -23,8 +47,26 @@
      <height>21</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuSettings">
+    <property name="title">
+     <string>Settings</string>
+    </property>
+    <addaction name="actionExit"/>
+    <addaction name="actionPreferences"/>
+   </widget>
+   <addaction name="menuSettings"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+  </action>
+  <action name="actionPreferences">
+   <property name="text">
+    <string>Preferences</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>
